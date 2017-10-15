@@ -1,0 +1,3 @@
+[submodule "NYTimes"]
+	path = NYTimes
+	url = http://github.com/kuhnrl30/NYTimes
