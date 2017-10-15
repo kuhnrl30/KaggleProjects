@@ -1,0 +1,16 @@
+language: r
+sudo: false
+cache: packages
+r_packages: 
+  - prettydoc
+  - plyr
+  - rpart
+  - rpart.plot
+  - ggplot2
+  - doParallel
+  - caret
+  - httr
+  - dplyr
+  - SnowballC
+  - e1071
+  

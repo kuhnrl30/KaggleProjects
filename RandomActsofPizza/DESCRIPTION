@@ -1,0 +1,20 @@
+Package: RandomActsofPizza
+Type: Package
+Title: Documenting an Analysis for Kaggle's Random Acts of Pizza Competition
+Version: 0.1.1
+Authors@R: person("Ryan","Kuhn",email="kuhnrl30@gmail.com",role=c("aut","cre"))
+Author: Ryan Kuhn
+Maintainer: Ryan Kun <kuhnrl30@gmail.com>
+Description: This package documents the analysis performed to compete in
+    Kaggle's Random Acts of Pizza competition. The analysis is contained
+	within the vignettes.
+License: MIT + file LICENSE
+LazyData: TRUE
+RoxygenNote: 6.0.1
+Suggests: knitr,
+	rmarkdown
+VignetteBuilder: knitr
+Imports:
+	tm,
+	utils,
+	methods

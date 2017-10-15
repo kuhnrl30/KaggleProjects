@@ -1,0 +1,267 @@
+---
+title: "Exploratory Analysis"
+date: '`r format(Sys.Date(),"%B %d, %Y")`'
+output: rmarkdown::html_vignette
+layout: post
+htmlwidgets: false
+comments: true
+tags: [R]
+vignette: >
+    %\VignetteIndexEntry{LabCorp Location Data Workflow}
+    %\VignetteEngine{knitr::rmarkdown}
+    \usepackage[utf8]{inputenc}
+---
+
+```{r, echo=F}
+knitr::opts_chunk$set(cache=FALSE, fig.height=3, fig.width = 7, comment=NULL, eval=T, tidy=F, width=80)
+```
+
+## The Challenge
+Kaggle launched a machine learning challenge based on the Random Acts of Pizza (RAOP) project on  [Reddit](http://www.reddit.com/r/Random_Acts_Of_Pizza/). The basic premise of ROAP is that people can buy a pizza for any random person that asks for it. People have made requests by describing hard times, asking very politely, or even offering to write poems in return.  The challenge was to predict whether a request would be successful and receive a free pizza.  Here is the link to the competition page: [Link](http://www.kaggle.com/c/random-acts-of-pizza/data).
+
+## Getting Started  
+
+#### Setup the Environment
+```{r environment, warning=F, message=F}
+library(RandomActsofPizza)
+library(rjson)      # read in the dataset
+library(dplyr)      # data manipulation
+library(ggplot2)    # plotting
+library(tm)
+```
+
+#### Load the Training Data  
+You could get the data directly from the Kaggle website but they'll require you to sign in and accept the terms of the competition. Unfortunately, they haven't developed an API to do this programatically but you can get it from my Dropbox.  The data downloads as a 1.7MB zip file in JSON format.  
+
+```{r loaddata}
+trainURL  <- "https://www.dropbox.com/s/xkvj3mg6isy23hk/RandomActsofPizza-train.json?raw=1"
+Train.raw <- fromJSON(file=trainURL, method='C')
+train     <- PrepareData(Train.raw)
+
+testURL   <- "https://www.dropbox.com/s/uu46twnfqdhgmvh/RandomActsofPizza-test.json?raw=1"
+Test.raw  <- fromJSON(file=testURL, method='C')
+test      <- PrepareData(Test.raw)
+```
+
+```{r cleanup, echo=F}
+rm(trainURL, Train.raw, testURL, Test.raw)
+```
+
+The Kaggle website describes the **requester_user_flair** field as used to say if the requester received pizza, received pizza and gave pizza, or didn't receive any pizza. This seems like it would give away the outcome of the request so we'll check to see if its in the test dataset. This field as well as a few others are only in the training dataset. There are only 17 fields in the test set while there are 32 fields in the training set. These fields will be removed to prevent us from building model on data points that won't be available later when we apply the model to the test dataset.  
+
+```{r}
+#remove columns not in test set and put in the same order
+train<- train %>%
+    select(one_of(names(test)), requester_received_pizza)
+
+# Convert all N/A to NA
+train<-as.data.frame(lapply(train,function(x) gsub("N/A",NA,x)),stringsAsFactors=F)
+test <-as.data.frame(lapply(test, function(x) gsub("N/A",NA,x)),stringsAsFactors=F)
+
+# convert character columns to numeric
+train[,c(5:11,13:14,16:17)]<-apply(train[,c(5:11,13:14,16:17)], 2,as.numeric)
+test[,c(5:11,13:14,16:17)] <-apply(test[,c(5:11,13:14,16:17)], 2,as.numeric)
+train$requester_received_pizza<-ifelse(train$requester_received_pizza=="TRUE",1,0)
+```
+
+## Exploratory Analytics and Feature Engineering
+
+#### Finding the Missing Values 
+With the dataset loaded, we'll start with some exploratory analysis to understand the dataset.
+We'll look at the attribute names and then make several plots determine which of the attributes might add predictive power. Let's take a quick look at the dataset and see where the missing values are.
+
+```{r}
+NA.counts<-plyr::ldply(lapply(train,function(x) sum(is.na(x))))
+NA.counts %>%
+    filter(!V1==0) %>%
+    simpleprint()
+```
+
+
+### Analysis of Time Values  
+Next, we'll look at the success rates by different time periods to see if there are any trends with time. We'll need to convert the date fields to POSIXct so the year can be extracted and then we can create a chart of the success rates. Using the table below, we can see that success rates have decreased across the years- both proportionally and nominally. The 2011 success rate is approximately 30 percent while the 2013 rate is a little more than 20 percent. This means that a request in 2013 is less likely to be receive a free pizza then the year before. The difference in years could have predictive power so we'll keep it in mind for later.
+
+```{r convertTime}
+# Convert date field to POSIXct format and create field for the year
+train<- train %>% 
+    mutate(unix_timestamp_of_request_utc= as.POSIXct(unix_timestamp_of_request_utc, 
+                                                     origin= "1970-01-01", 
+                                                     tz="UTC"),
+           Year= factor(format(unix_timestamp_of_request_utc,format='%Y')))
+
+test<- test %>%
+    mutate(unix_timestamp_of_request_utc= as.POSIXct(unix_timestamp_of_request_utc, 
+                                                     origin= "1970-01-01", 
+                                                     tz="UTC"),
+           Year= factor(format(unix_timestamp_of_request_utc,format='%Y')))
+
+train %>%
+    group_by(Year) %>%
+    summarise(Count=length(Year),
+              Success= sum(requester_received_pizza)) %>%
+    mutate(Percent=paste(round(Success/Count,3)*100,"%", sep=""))
+```  
+
+#### Success Rate by Day of the Week  
+Based on the table above, it looks like requests were getting less successful with each year. Perhaps as word got out about the program there were more requesters than pizza buyers or requests became disingenuous. We'd need to investigate the text to get those answers but for now we'll take a look at the data by day of the week. This will be a test to see if the requests are more successful on the weekend for example. This data doesn't appear to have very strong predictive power because the variance between days is not very great. 
+
+```{r weekdays} 
+train<- train %>%
+    mutate(weekday= factor(weekdays(unix_timestamp_of_request_utc,F))) 
+
+test<- test %>%
+    mutate(weekday= factor(weekdays(unix_timestamp_of_request_utc,F))) 
+
+train %>%
+    group_by(weekday) %>%
+    summarise(Count=length(weekday),
+              Success=sum(requester_received_pizza)) %>%
+    mutate(Percent=paste(round(Success/Count,3)*100,"%",sep="")) 
+```
+
+
+We can put these three time related variables into our model later and let it decide which has more predictive power. 
+
+### Converting to Binary Variables   
+
+One of the fields is called giver_username_if_known. This variable is particulary interesting because, logically, in order for a giver to be known, they must first have given a pizza. We'll convert this variable to a binary value: 0 for an NA value and 1 for when the giver username exists. We can create a table showing the success rates by this binary value. The table shows us that whenerver there is a value in the giver_username_if_known variable and it is not an NA, then the request was successful. That makes sense and we expected that result. 
+
+```{r giverusername}
+train<- train %>%
+    mutate(giver_username_if_known= ifelse(is.na(giver_username_if_known),0,1))
+
+test<- test %>%
+    mutate(giver_username_if_known= ifelse(is.na(giver_username_if_known),0,1))
+
+train %>%
+    group_by(giver_username_if_known) %>%
+    summarise(Count=length(giver_username_if_known),
+              Success= sum(requester_received_pizza)) %>%
+    mutate(Percent=paste(round(Success/Count,3)*100,"%",sep=""))
+```
+
+#### Did it Help to Add Images to the Request? 
+Next, we'll see look at the impact of attaching an image to the request. Per the research paper referenced in the competition website, attaching an image is supposed to increase the success rate. We'll see if this holds true in our training dataset. From the table below, it appears that this is correct but there are very few instances where an image was attached. This variable may not add much to our model.
+
+```{r image}
+train<- train %>%
+    mutate(Image = ifelse(grepl("i.imgur",train$request_text),1,0))
+
+test<- test %>%
+    mutate(Image = ifelse(grepl("i.imgur",test$request_text),1,0))
+
+train %>%
+    group_by(Image) %>%
+    summarise(Count=length(Image),
+              Success= sum(requester_received_pizza==1)) %>%
+    mutate(percent=paste(round(Success/Count,3)*100,"%",sep=""))
+```
+
+#### Does Age of Reddit Account Affect the Outcome?
+The age of the requester's Reddit account may have an influence on whether the request is successful. This analysis will separate users that are not likely contributors to the community and less likely to receive a free pizza. The difference in the success rates seems to indicate this variable could have predictive power. 
+
+```{r accountAge}
+p<- ggplot()
+p<- p + aes(x= 1:2000,
+            y= FindCutoff(train$requester_received_pizza,
+                   train$requester_account_age_in_days_at_request, 
+                   1:2000))
+p<- p + geom_line()
+p<- p + labs(x="Cutoff level",
+             y="Success Rate")
+p<- p + theme_minimal()
+p
+
+
+train <- train %>%
+    mutate(Acct.Age=ifelse(requester_account_age_in_days_at_request>500,1,0))
+
+test <- test %>%
+    mutate(Acct.Age=ifelse(requester_account_age_in_days_at_request>500,1,0))
+```
+
+#### Number of Comments
+Requests may be more successful if the requester has more comments in the RAOP community. However, like the image variable, this may not add much predictive power.
+
+```{r numComments}
+p<- ggplot()
+p<- p + aes(x= 1:88,
+            y= FindCutoff(train$requester_received_pizza,
+                          train$requester_number_of_comments_in_raop_at_request, 
+                          1:88))
+p<- p + geom_line()
+p<- p + labs(x="Cutoff level",
+             y="Success Rate")
+p<- p + theme_minimal()
+p
+
+train <- train %>%
+    mutate(BnRAOP = ifelse(requester_number_of_comments_in_raop_at_request>9,1,0))
+
+test <- test %>%
+    mutate(BnRAOP = ifelse(requester_number_of_comments_in_raop_at_request>9,1,0))
+```
+
+### Text Analysis 
+#### Calculating a Basic Word Count  
+You can imagine that the text of the request is very important to whether the someone buys a pizza or not. It has to grab the readers attention, present a compelling case, or entertain. The text analysis starts with a simple analysis of the word count. Each request will be split and get the length, or count, of the number of words. We'll start by grouping the requests by percentiles and determining if the success rates have enough variance to give predictive power.
+
+```{r words}
+train$Words<- sapply(strsplit(train$request_text," ",fixed=T),length)
+test$Words <- sapply(strsplit(test$request_text," ",fixed=T),length)
+
+train<- within(train, Word.bin<- as.integer(cut(Words,quantile(Words, probs=0:2/2), 
+                                                include.lowest=T)))
+test <- within(test, Word.bin<- as.integer(cut(Words, quantile(Words, probs=0:2/2), 
+                                                include.lowest=T)))
+train %>%
+    group_by(Word.bin) %>%
+    summarise(Count=length(Word.bin),
+              Success= sum(requester_received_pizza==1)) %>%
+    mutate(Percent=paste(round(Success/Count,3)*100,"%",sep=""))
+```
+
+We'll analyze the requests using term word frequency data. The text will be reprocessed by changing all characters to lower case, removing punctuation, removing stop words, and finally stemming the words. Once processed, we'll look for words that are in at least 90% of the documents.
+
+```{r trainTextAnalytics,results='hide', warning=FALSE}
+removewords<-c("pizza","anyon","anyth","appreci","back")
+dtmTrain<- ProcessText(train$request_text_edit_aware, remove=removewords)
+dtmTest <- ProcessText(test$request_text_edit_aware, remove=removewords)
+
+sparseTrain<-removeSparseTerms(dtmTrain,0.90)
+
+TextTrain<- as.data.frame(as.matrix(sparseTrain), row.names=F)
+
+TextTest <- as.data.frame(as.matrix(dtmTest), row.names=F)
+TextTest <- TextTest[,colnames(TextTest) %in% names(TextTrain)]
+```
+
+```{r plottraintext}
+names(TextTrain)
+barplot(colSums(TextTrain))
+``` 
+
+## Finalize the datasets
+Since we've done the transformations on the text fields like the username and time fields like the timestamp, we won't need them in the final train and test datasets. We'll keep them in another dataset *just in case*. I'll also trim some of the longer column names by reducing 'requester' to 'req'.  We'll prep the final train and test datasets by appending the text data.  
+```{r}
+names(train)<-gsub("requester_","",names(train))
+names(train)<-gsub("_at_request","",names(train))
+
+names(test) <-gsub("requester_","",names(test))
+names(test) <-gsub("_at_request","",names(test))
+
+justInCase<- as.data.frame(rbind(train[, c(2:4,12,15:17)],
+                                  test[, c(2:4,12,15:17)]))
+
+train <- as.data.frame(cbind(train[,-c(2:4,12,15:17)], TextTrain),
+                       stringsAsFactors=F)
+
+test <- as.data.frame(cbind(test[,-c(3:4,12,15:17)],  TextTest),
+                      stringsAsFactors=F)
+```
+## What's Next
+This is the end of the exploratory analysis. We've looked at missing values, converted numeric values to binary, and worked with the text. The analysis continues with the next vignette. 
+
+```
+vignette("ModelBuilding")
+```

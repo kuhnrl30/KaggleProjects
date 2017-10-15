@@ -1,0 +1,27 @@
+template:
+  ganalytics: 'UA-66230069-1'
+  params:
+    bootswatch: journal
+reference:
+- title: Functions
+  desc: Functions used in the analysis
+  contents:
+  - ProcessText
+  - PrepareData
+  - MergeModels
+  - FindCutoff
+  - FillNulls
+  - simpleprint
+navbar:
+  title: Random Acts of Pizza
+  type: default
+  left:
+  - text: Analysis
+    href: articles/index.html
+  - text: Functions
+    href: reference/index.html
+  right:
+    - text: ryankuhn.net
+      href: http://ryankuhn.net
+    - icon: fa-github
+      href: https://github.com/kuhnrl30/RandomActsofPizza

@@ -1,0 +1,20 @@
+Package: NYTimes
+Type: Package
+Date: 2017-02-20
+Title: Documenting the analysis to compete in the NY Times Kaggle competition
+Version: 0.1.0
+Authors@R: person("Ryan", "Kuhn", email="kuhnrl30@gmail.com", role=c("aut", "cre"))
+Description: The vignette in this package contains the code to prepare the submission for the
+	NY Times Kaggle competition.  The objective was to predict whether a blog post would be 
+	popular. The final accuracy score was used to determine the grade in the Analytics Edge 
+	course on EdX.
+URL: https://github.com/kuhnrl30/NYTimes
+BugReports: https://github.com/kuhnrl30/NYTimes/issues
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+BuildVignettes: TRUE
+Suggests: knitr,
+    rmarkdown
+VignetteBuilder: knitr
+RoxygenNote: 6.0.1
