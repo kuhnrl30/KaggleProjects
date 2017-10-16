@@ -1,2 +1,0 @@
-#Titanic
-This was my first Kaggle competition.  Up to this point, I had only a brief introduction to R through grad school so I used this opportunity to become familiar the language.  I relied heavily on the walkthrough script and learned the concepts of feature engineering logistic regression. Later I used this competition to get acquainted with Python.

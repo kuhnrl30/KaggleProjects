@@ -1,9 +1,0 @@
-^.*\.Rproj$
-^\.Rproj\.user$
-.travis.yml
-^docs/*
-^\.Rhistory
-^\.gitignore
-_pkgdown.yml
-^index.Rmd
-README.md
